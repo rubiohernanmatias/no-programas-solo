@@ -1,0 +1,73 @@
+version: '3.8'
+
+services:
+  mysql:
+    image: mysql:8
+    container_name: wp_mysql
+    restart: always
+    environment:
+      MYSQL_DATABASE: ${WP_DB_NAME}
+      MYSQL_USER: ${WP_DB_USER}
+      MYSQL_PASSWORD: ${WP_DB_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${WP_DB_ROOT_PASSWORD}
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - wordpress_network
+
+  wordpress:
+    image: wordpress:latest
+    container_name: wp_wordpress
+    restart: always
+    ports:
+      - "8080:80"
+    environment:
+      WORDPRESS_DB_HOST: mysql:3306
+      WORDPRESS_DB_NAME: ${WP_DB_NAME}
+      WORDPRESS_DB_USER: ${WP_DB_USER}
+      WORDPRESS_DB_PASSWORD: ${WP_DB_PASSWORD}
+      WORDPRESS_CONFIG_EXTRA: |
+        $$host = $$_SERVER['HTTP_X_FORWARDED_HOST'] ?? $$_SERVER['HTTP_HOST'];
+        $$host = preg_replace('/:\d+$/', '', $$host);
+
+        // Normalizar server vars para Codespaces
+        $$_SERVER['HTTP_HOST'] = $$host;
+        $$_SERVER['SERVER_NAME'] = $$host;
+        $$_SERVER['HTTPS'] = 'on';
+        $$_SERVER['HTTP_X_FORWARDED_PROTO'] = 'https';
+        $$_SERVER['HTTP_X_FORWARDED_PORT'] = '8080';
+        $$_SERVER['SERVER_PORT'] = 8080;
+
+        // URLs base correctas (sin :puerto extra)
+        define('WP_HOME',    'https://' . $$host);
+        define('WP_SITEURL', 'https://' . $$host);
+    volumes:
+      - ./plugins-demo:/var/www/html/wp-content/plugins
+      - wordpress_data:/var/www/html
+    depends_on:
+      - mysql
+    networks:
+      - wordpress_network
+
+  phpmyadmin:
+    image: phpmyadmin:latest
+    container_name: wp_phpmyadmin
+    restart: always
+    ports:
+      - "8081:80"
+    environment:
+      PMA_HOST: mysql
+      PMA_PORT: 3306
+      MYSQL_ROOT_PASSWORD: ${WP_DB_ROOT_PASSWORD}
+    depends_on:
+      - mysql
+    networks:
+      - wordpress_network
+
+volumes:
+  mysql_data:
+  wordpress_data:
+
+networks:
+  wordpress_network:
+    driver: bridge
